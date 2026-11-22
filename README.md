@@ -23,20 +23,16 @@ iPhone (Home-App) ──HomeKit──▶ Homebridge ──▶ Plugin "homebridge
 
 ## Installation auf frischem Pi
 
-1. **Raspberry Pi Imager**: „Raspberry Pi OS Lite (64-bit)“ wählen. In den Einstellungen Hostname, Benutzer, WLAN und SSH eintragen.
-2. Per SSH einloggen und dann:
+👉 **Schritt für Schritt, nur per SSH und ohne Bildschirm: [ERSTEINRICHTUNG.md](ERSTEINRICHTUNG.md)** (für Pi Zero W / Zero 2 W)
 
-   ```bash
-   sudo apt update && sudo apt install -y git
-   git clone https://github.com/Selbstverliebter/Selbstverliebter.git ledstrip
-   cd ledstrip
-   git checkout claude/led-stripe-homebridge-setup-g1xrrv   # bis das in main ist
-   sudo ./install.sh
-   sudo ./scripts/stabilisieren.sh
-   sudo reboot
-   ```
+Kurzfassung, wenn du schon per SSH eingeloggt bist:
 
-3. Im Browser `http://<IP-des-Pi>:8581` öffnen, Benutzer anlegen und den QR-Code mit der Home-App scannen.
+```bash
+cd ledstrip
+sudo ./install.sh
+sudo ./scripts/stabilisieren.sh
+sudo reboot
+```
 
 ## GPIO-Pins einstellen
 

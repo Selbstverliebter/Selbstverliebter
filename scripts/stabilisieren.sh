@@ -32,7 +32,17 @@ echo "==> 4) Logs begrenzen + nach Neustart behalten (damit man Abstürze nachle
 mkdir -p /etc/systemd/journald.conf.d /var/log/journal
 printf '[Journal]\nStorage=persistent\nSystemMaxUse=50M\n' > /etc/systemd/journald.conf.d/size.conf
 
-echo "==> 5) Homebridge: avahi als mDNS-Advertiser (stabiler unter Linux)"
+echo "==> 5) Mehr Swap bei wenig RAM (Pi Zero hat nur 512 MB – sonst killt der Kernel Homebridge)"
+MEM_MB=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+echo "   RAM: ${MEM_MB} MB"
+if (( MEM_MB < 1024 )) && [[ -f /etc/dphys-swapfile ]]; then
+  sed -i 's/^#\?CONF_SWAPSIZE=.*/CONF_SWAPSIZE=512/' /etc/dphys-swapfile
+  systemctl restart dphys-swapfile && echo "   Swap auf 512 MB gesetzt."
+elif (( MEM_MB < 1024 )); then
+  echo "   (System nutzt kein dphys-swapfile – aktuellen Swap ansehen mit: free -m)"
+fi
+
+echo "==> 6) Homebridge: avahi als mDNS-Advertiser (stabiler unter Linux)"
 apt-get install -y avahi-daemon >/dev/null
 CFG=/var/lib/homebridge/config.json
 if [[ -f $CFG ]]; then

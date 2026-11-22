@@ -30,15 +30,37 @@ if systemctl list-unit-files pigpiod.service >/dev/null 2>&1; then
   systemctl enable --now pigpiod || true
 fi
 
+MODEL="$(tr -d '\0' </proc/device-tree/model 2>/dev/null || echo unbekannt)"
+ARCH="$(uname -m)"
+echo "   Modell: $MODEL  ($ARCH)"
+
 step "Homebridge installieren (falls noch nicht da)"
-if ! command -v hb-service >/dev/null 2>&1; then
+HB_VIA_NPM=0
+if command -v hb-service >/dev/null 2>&1; then
+  echo "   Homebridge ist schon installiert."
+  [[ -x /opt/homebridge/bin/npm ]] || HB_VIA_NPM=1
+elif [[ "$ARCH" == "armv6l" ]]; then
+  # Pi Zero W / Pi 1: Das Homebridge-Paket und offizielles Node.js laufen hier nicht mehr.
+  # Wir nehmen Node.js aus den inoffiziellen ARMv6-Builds und Homebridge über npm.
+  HB_VIA_NPM=1
+  echo "   ARMv6 (Pi Zero W) erkannt → Node.js aus unofficial-builds.nodejs.org"
+  NODE_VER="$(curl -fsSL https://unofficial-builds.nodejs.org/download/release/index.json | python3 -c '
+import json, sys
+for r in json.load(sys.stdin):
+    if r["version"].startswith("v22.") and "linux-armv6l" in r["files"]:
+        print(r["version"]); break')"
+  [[ -n "$NODE_VER" ]] || { echo "Keine Node.js-Version für ARMv6 gefunden." >&2; exit 1; }
+  echo "   Node.js $NODE_VER"
+  curl -fsSL "https://unofficial-builds.nodejs.org/download/release/$NODE_VER/node-$NODE_VER-linux-armv6l.tar.xz" \
+    | tar -xJ -C /usr/local --strip-components=1
+  npm install -g --unsafe-perm --no-audit --no-fund homebridge homebridge-config-ui-x
+  hb-service install --user homebridge
+else
   curl -sSfL https://repo.homebridge.io/KEY.gpg | gpg --dearmor --yes -o /usr/share/keyrings/homebridge.gpg
   echo "deb [signed-by=/usr/share/keyrings/homebridge.gpg] https://repo.homebridge.io stable main" \
     > /etc/apt/sources.list.d/homebridge.list
   apt-get update
   apt-get install -y homebridge
-else
-  echo "   Homebridge ist schon installiert."
 fi
 
 step "ledstripd einrichten"
@@ -66,15 +88,19 @@ fi
 
 step "Homebridge-Plugin installieren"
 # Warten, bis Homebridge beim ersten Start seine config.json angelegt hat
-for _ in $(seq 1 60); do [[ -f "$HB_CFG" ]] && break; sleep 1; done
+for _ in $(seq 1 240); do [[ -f "$HB_CFG" ]] && break; sleep 1; done
 install -d "$HB_DIR/local-plugins"
 rm -rf "$PLUGIN_DST"
 cp -r "$PLUGIN_SRC" "$PLUGIN_DST"
 chown -R homebridge:homebridge "$HB_DIR/local-plugins"
-NPM=/opt/homebridge/bin/npm
-[[ -x "$NPM" ]] || NPM="$(command -v npm)"
-sudo -u homebridge env PATH="$(dirname "$NPM"):$PATH" \
-  "$NPM" --prefix "$HB_DIR" install --no-audit --no-fund "file:$PLUGIN_DST"
+if [[ $HB_VIA_NPM -eq 1 ]]; then
+  # Homebridge über npm -g installiert → Plugin ebenfalls global
+  npm install -g --no-audit --no-fund "$PLUGIN_DST"
+else
+  # Homebridge aus dem apt-Paket → Plugins liegen in /var/lib/homebridge/node_modules
+  sudo -u homebridge env PATH="/opt/homebridge/bin:$PATH" \
+    /opt/homebridge/bin/npm --prefix "$HB_DIR" install --no-audit --no-fund "file:$PLUGIN_DST"
+fi
 
 step "LED-Stripe in Homebridge eintragen"
 python3 - "$HB_CFG" <<'PY'
