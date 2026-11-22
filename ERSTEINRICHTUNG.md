@@ -1,25 +1,27 @@
 # Ersteinrichtung ohne Bildschirm (nur per SSH)
 
-Diese Anleitung ist für einen **Raspberry Pi Zero 2 W** oder **Zero W**. Du brauchst keinen Monitor und keine Tastatur,
-nur einen Computer mit SD-Kartenleser und dasselbe WLAN.
+Für den **Raspberry Pi Zero W (v1.1)**. Andere Modelle gehen genauso.
+Du brauchst nur einen Computer mit SD-Kartenleser und dasselbe WLAN, keinen Monitor und keine Tastatur.
 
-## 1. Welcher Zero ist es?
+## Wie es funktioniert
 
-Schau auf den großen Chip in der Mitte der Platine:
+Der Pi Zero W ist zu schwach für Homebridge. Deshalb meldet sich der Pi hier **selbst als HomeKit-Gerät** bei Apple Home an.
+Es gibt **kein Homebridge** und kein Node.js, nur ein kleines Python-Programm. Das braucht ca. 40 MB RAM statt 200+ MB
+und ist deutlich stabiler.
 
-| Aufdruck auf dem Chip / der Platine | Modell | Betriebssystem im Imager |
-|---|---|---|
-| **RP3A0**, Platine sagt „Zero 2 W“ | Pi Zero 2 W (schneller, 4 Kerne) | **Raspberry Pi OS Lite (64-bit)** |
-| **BCM2835** | Pi Zero W (alt, 1 Kern) | **Raspberry Pi OS Lite (32-bit)** |
+```
+iPhone (Home-App) ──HomeKit (WLAN)──▶ Pi Zero W: ledstripd ──PWM──▶ MOSFETs ──▶ LED-Stripe
+```
 
-Wenn du dir unsicher bist: Nimm **Lite (32-bit)**. Das läuft auf beiden.
-Später kannst du per SSH nachsehen, welches Modell es ist: `cat /proc/device-tree/model`
+## 1. Betriebssystem
+
+Im Imager **„Raspberry Pi OS Lite (32-bit)“** wählen, unter „Raspberry Pi OS (other)“.
+⚠️ Nicht die 64-bit-Version, die läuft auf dem Zero W nicht.
 
 ## 2. SD-Karte beschreiben (am Computer)
 
 1. **Raspberry Pi Imager** installieren: https://www.raspberrypi.com/software/
-2. Als Gerät „Raspberry Pi Zero 2 W“ bzw. „Raspberry Pi Zero“ wählen, dann das Betriebssystem aus der Tabelle oben.
-   Das findest du unter „Raspberry Pi OS (other)“. Danach die SD-Karte auswählen.
+2. Als Gerät **„Raspberry Pi Zero“** wählen, als Betriebssystem **Raspberry Pi OS Lite (32-bit)**, dann die SD-Karte.
 3. Bei **„Einstellungen bearbeiten“ / „Anpassen“** Folgendes eintragen. Das ist der wichtigste Schritt:
    - **Hostname:** `ledstrip`
    - **Benutzername + Passwort:** z. B. `pi` und ein eigenes Passwort
@@ -70,38 +72,64 @@ cd ledstrip
 
 ```bash
 sudo ./install.sh
+```
+
+Das dauert auf dem Zero W **10–30 Minuten**. Lass das SSH-Fenster offen, bis „Fertig!“ erscheint.
+Wenn die Verbindung abbricht, verbindest du dich neu und startest `sudo ./install.sh` einfach nochmal.
+Das Skript kann man beliebig oft ausführen.
+
+Danach die Maßnahmen gegen Abstürze aktivieren und neu starten:
+
+```bash
 sudo ./scripts/stabilisieren.sh
 sudo reboot
 ```
 
-Der Zero braucht dafür **15–40 Minuten**. Lass das SSH-Fenster offen, bis „Fertig!“ erscheint.
-Wenn die Verbindung abbricht, verbindest du dich neu und startest `sudo ./install.sh` einfach nochmal. Das Skript kann man beliebig oft ausführen.
+## 6. Farben testen
 
-## 6. Testen und koppeln
-
-Nach dem Neustart wieder einloggen (`ssh pi@ledstrip.local`) und dann:
+Etwa eine Minute warten, dann wieder einloggen (`ssh pi@ledstrip.local`) und Folgendes eingeben:
 
 ```bash
-cd ledstrip
 curl -X POST -d '{"on":true,"hue":0,"saturation":100,"brightness":30}' http://127.0.0.1:8765/state
 ```
 
-→ Der Stripe sollte **rot** leuchten. Wenn eine andere Farbe kommt, passt du die Pins an (siehe README):
+→ Der Stripe sollte **rot** leuchten. Wenn eine andere Farbe kommt, passt du die Pins an:
 
 ```bash
-sudo nano /etc/ledstrip/config.json      # speichern: Strg+O, Enter, Strg+X
+sudo nano /etc/ledstrip/config.json      # bei "pins" die Nummern tauschen; speichern: Strg+O, Enter, Strg+X
 sudo systemctl restart ledstrip
 ```
 
-Danach am iPhone oder Computer im Browser **http://ledstrip.local:8581** öffnen. Beim ersten Mal legst du einen Benutzer an.
-Dann in der **Home-App** auf „+“ → „Gerät hinzufügen“ tippen und den QR-Code von der Homebridge-Seite scannen. Fertig. 🎉
+## 7. Mit Apple Home koppeln
+
+```bash
+sudo cat /var/lib/ledstrip/pairing.txt
+```
+
+Das zeigt einen **QR-Code** und einen **8-stelligen Code** (z. B. `924-50-261`) direkt im SSH-Fenster.
+Mach das Terminal-Fenster groß genug, sonst wird der QR-Code zerschnitten.
+
+In der **Home-App**: „+“ → „Gerät hinzufügen“ → QR-Code scannen.
+Oder: „Weitere Optionen …“ → „LED Stripe“ antippen → den 8-stelligen Code eingeben.
+Die Meldung „Nicht zertifiziertes Gerät“ bestätigst du mit „Trotzdem hinzufügen“. Fertig. 🎉
+
+**Neu koppeln** (z. B. wenn du den Stripe in der Home-App gelöscht hast):
+
+```bash
+sudo systemctl stop ledstrip
+sudo rm /var/lib/ledstrip/homekit.state
+sudo systemctl start ledstrip
+sudo cat /var/lib/ledstrip/pairing.txt
+```
 
 ## Hinweise zum Pi Zero
 
-- **Strom:** Der Zero braucht 5 V mit mindestens 1,2 A (Zero 2 W: besser 2,5 A). Wenn er aus dem LED-Netzteil versorgt wird,
+- **Strom:** Der Zero W braucht 5 V mit mindestens 1,2 A. Wenn er aus dem LED-Netzteil versorgt wird,
   brauchst du einen ordentlichen Step-down-Wandler (5 V, ≥ 2 A). Unterspannung ist die Absturzursache Nr. 1.
   Prüfen mit: `vcgencmd get_throttled` (`0x0` = alles gut).
-- **RAM:** Der Zero hat nur 512 MB. `stabilisieren.sh` vergrößert deshalb den Swap. Ohne das kann der Kernel
-  Homebridge einfach beenden. Das passt auch zu deinem alten Problem, dass das Gerät „nicht erreichbar“ war.
-- **Zero W (alt):** Homebridge läuft dort nur inoffiziell und ist langsam. Das Installationsskript macht das automatisch.
-  Wenn du die Wahl hast, nimm einen Zero 2 W.
+- **RAM:** Der Zero W hat nur 512 MB. Mit Homebridge war das knapp, und der Kernel beendet Programme, wenn der Speicher voll ist.
+  Das passt zu deinem alten Problem, dass das Gerät „nicht erreichbar“ war. Ohne Homebridge ist mehr als genug Speicher frei.
+- **Feste IP:** Stell im Router ein, dass der Pi immer dieselbe IP bekommt. Das macht HomeKit zuverlässiger.
+- **Kein „Keine Antwort“ mehr nach Neustarts:** Der Dienst wartet beim Booten, bis das WLAN da ist, bevor er sich bei
+  HomeKit meldet. Nach einem Absturz startet er sich selbst neu.
+- **Homebridge trotzdem?** Auf einem stärkeren Pi (Zero 2 W, Pi 3/4/5) geht auch `sudo ./install.sh --homebridge`.

@@ -1,10 +1,13 @@
 # LED-Stripe am Raspberry Pi → Apple Home
 
-RGB-LED-Stripe, über 3 MOSFETs an GPIOs des Raspberry Pi, per Homebridge in Apple Home.
+RGB-LED-Stripe, über 3 MOSFETs an GPIOs des Raspberry Pi, in Apple Home.
+Standardmäßig meldet sich der Pi **direkt als HomeKit-Gerät** an (HAP-python), ganz ohne Homebridge. Das ist ideal für den Pi Zero W.
+Optional geht es auch über Homebridge: `sudo ./install.sh --homebridge`.
 Die Hardware ist dieselbe wie in der Anleitung von dordnung.de. Neu ist die Software:
 
 | Problem vorher | Lösung jetzt |
 |---|---|
+| Homebridge zu schwer für den Pi Zero W (512 MB, ARMv6) | HomeKit direkt in einem kleinen Python-Programm, ca. 40 MB RAM |
 | Beim Einschalten immer **weiß / 100 %** | „An“ schaltet nur an, Farbe und Helligkeit bleiben. Der Zustand wird auf der SD-Karte gespeichert und übersteht auch Neustarts. |
 | Programm stürzt ab, danach nicht mehr steuerbar | `ledstripd` läuft als systemd-Dienst und startet nach einem Absturz sofort neu (`Restart=always`). Das Plugin wiederholt Befehle, wenn der Dienst kurz weg war. |
 | Pi stürzt ab / ist „nicht erreichbar“ | `scripts/stabilisieren.sh`: prüft das Netzteil, schaltet den WLAN-Stromsparmodus aus, aktiviert den Hardware-Watchdog und stellt Homebridge auf avahi um |
@@ -12,13 +15,11 @@ Die Hardware ist dieselbe wie in der Anleitung von dordnung.de. Neu ist die Soft
 ## Aufbau
 
 ```
-iPhone (Home-App) ──HomeKit──▶ Homebridge ──▶ Plugin "homebridge-ledstrip-local"
-                                                   │ HTTP (nur lokal, 127.0.0.1:8765)
-                                                   ▼
-                                              ledstripd (Python, systemd)
-                                                   │ PWM (lgpio oder pigpio)
-                                                   ▼
-                                    GPIO → MOSFETs → LED-Stripe (R/G/B)
+Standard (Pi Zero W):
+iPhone (Home-App) ──HomeKit──▶ ledstripd (Python, systemd, HAP-python) ──PWM──▶ MOSFETs ──▶ LED-Stripe
+
+Optional (--homebridge, stärkere Pis):
+iPhone ──▶ Homebridge ──▶ Plugin homebridge-ledstrip-local ──HTTP 127.0.0.1:8765──▶ ledstripd ──▶ …
 ```
 
 ## Installation auf frischem Pi
@@ -29,9 +30,10 @@ Kurzfassung, wenn du schon per SSH eingeloggt bist:
 
 ```bash
 cd ledstrip
-sudo ./install.sh
+sudo ./install.sh                  # direkt HomeKit (Standard)
 sudo ./scripts/stabilisieren.sh
 sudo reboot
+sudo cat /var/lib/ledstrip/pairing.txt   # QR-Code zum Koppeln
 ```
 
 ## GPIO-Pins einstellen
@@ -67,6 +69,8 @@ Leiterbahn bis zum Pi verfolgen.
 | `gamma` | Helligkeitskurve. `2.0` sorgt dafür, dass niedrige Helligkeiten fein regelbar sind |
 | `pwm_frequency` | PWM-Frequenz in Hz. Wenn es auf Handyvideos flackert, ausprobieren: 400, 800 oder 1000 |
 | `channel_scale` | Farbkorrektur, z. B. `"blue": 0.8`, wenn Weiß zu bläulich wirkt |
+| `homekit.enabled` | `true` = direkt in Apple Home (setzt `install.sh` automatisch) |
+| `homekit.pincode` | Kopplungscode, den `install.sh` einmalig zufällig erzeugt |
 | `backend` | `"auto"` nimmt pigpio (Pi 0–4, falls installiert), sonst lgpio (alle Pis inkl. Pi 5) |
 
 ## Fehlersuche
@@ -89,7 +93,7 @@ journalctl -b -1 -e                # was war vor dem letzten Absturz?
 
 - `daemon/ledstripd.py`: der LED-Dienst (nur Python-Standardbibliothek + lgpio/pigpio)
 - `daemon/config.example.json`: Vorlage für `/etc/ledstrip/config.json`
-- `homebridge-ledstrip-local/`: Homebridge-Plugin ohne Abhängigkeiten
+- `homebridge-ledstrip-local/`: Homebridge-Plugin ohne Abhängigkeiten (nur für `--homebridge`)
 - `systemd/ledstrip.service`: systemd-Dienst
 - `install.sh`: installiert alles
 - `scripts/stabilisieren.sh`: Maßnahmen gegen Abstürze und Verbindungsabbrüche

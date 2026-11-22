@@ -7,7 +7,10 @@ ledstripd – kleiner, robuster Dienst für einen RGB-LED-Stripe am Raspberry Pi
 * stellt den Zustand nach einem Neustart wieder her
 * bietet eine winzige HTTP-API für das Homebridge-Plugin
 
-Nur Python-Standardbibliothek + lgpio (oder pigpio). Keine weiteren Abhängigkeiten.
+Apple Home geht auf zwei Wegen:
+  a) direkt: der Dienst ist selbst ein HomeKit-Gerät (HAP-python) → kein Homebridge nötig,
+     ideal für schwache Pis wie den Pi Zero W  ("homekit": {"enabled": true})
+  b) über Homebridge + Plugin homebridge-ledstrip-local (HTTP-API unten)
 
 API:
   GET  /state   -> {"on": true, "hue": 30, "saturation": 80, "brightness": 60}
@@ -41,6 +44,15 @@ DEFAULT_CONFIG = {
     "default_state": {"on": False, "hue": 30, "saturation": 70, "brightness": 60},
     # Optional: Farbkorrektur pro Kanal (0..1), falls Weiß z. B. zu blau wirkt
     "channel_scale": {"red": 1.0, "green": 1.0, "blue": 1.0},
+    # Direktes HomeKit ohne Homebridge
+    "homekit": {
+        "enabled": False,
+        "name": "LED Stripe",
+        "port": 51826,
+        "pincode": None,          # "XXX-XX-XXX"; None = zufällig erzeugen
+        "persist_file": "/var/lib/ledstrip/homekit.state",
+        "pairing_file": "/var/lib/ledstrip/pairing.txt",
+    },
 }
 
 
@@ -218,6 +230,7 @@ class LedStrip:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._save_timer = None
+        self.listeners = []  # werden bei jeder Änderung mit dem neuen Zustand aufgerufen
         self._fade_from = self.current
         self._fade_start = time.monotonic()
         self.thread = threading.Thread(target=self._render_loop, daemon=True)
@@ -327,10 +340,16 @@ class LedStrip:
             self._fade_start = time.monotonic()
             self.target = self._target_rgb()
         self._wake.set()
+        state = self.get()
         if changed:
             log.info("Neuer Zustand: %s", new)
             self._schedule_save()
-        return self.get()
+        for listener in list(self.listeners):
+            try:
+                listener(state)
+            except Exception as exc:
+                log.error("Listener-Fehler: %s", exc)
+        return state
 
     def shutdown(self):
         self._stop.set()
@@ -383,6 +402,106 @@ def make_handler(strip):
     return Handler
 
 
+# --------------------------------------------------------------------------- #
+# HomeKit direkt (HAP-python)
+# --------------------------------------------------------------------------- #
+HK_TO_KEY = {"On": "on", "Brightness": "brightness", "Hue": "hue", "Saturation": "saturation"}
+
+
+def make_homekit_driver(cfg, strip):
+    from pyhap.accessory import Accessory
+    from pyhap.accessory_driver import AccessoryDriver
+    from pyhap.const import CATEGORY_LIGHTBULB
+
+    hk = cfg["homekit"]
+
+    class LightAccessory(Accessory):
+        category = CATEGORY_LIGHTBULB
+
+        def __init__(self, driver, name):
+            super().__init__(driver, name)
+            self.set_info_service(
+                manufacturer="DIY", model="RGB LED Stripe (MOSFET)",
+                serial_number="ledstrip-1", firmware_revision="1.0")
+            s = strip.get()
+            serv = self.add_preload_service(
+                "Lightbulb", chars=["On", "Brightness", "Hue", "Saturation"])
+            self.chars = {
+                "On": serv.configure_char("On", value=bool(s["on"])),
+                "Brightness": serv.configure_char("Brightness", value=round(s["brightness"])),
+                "Hue": serv.configure_char("Hue", value=round(s["hue"])),
+                "Saturation": serv.configure_char("Saturation", value=round(s["saturation"])),
+            }
+            # Alle Werte eines HomeKit-Befehls kommen hier GEMEINSAM an
+            # (z. B. Hue + Saturation + On) → ein einziges Update, kein Weiß-Blitzen.
+            serv.setter_callback = self._on_set
+            strip.listeners.append(self._on_state)
+
+        def _on_set(self, values):
+            patch = {HK_TO_KEY[k]: v for k, v in values.items() if k in HK_TO_KEY}
+            log.info("HomeKit: %s", patch)
+            strip.update(patch)
+
+        def _on_state(self, s):
+            # Änderungen von außen (curl, Korrekturen) an HomeKit melden
+            new = {"On": bool(s["on"]), "Brightness": round(s["brightness"]),
+                   "Hue": round(s["hue"]), "Saturation": round(s["saturation"])}
+            for name, value in new.items():
+                if self.chars[name].value != value:
+                    self.chars[name].set_value(value)
+
+    kwargs = {"port": int(hk["port"]), "persist_file": hk["persist_file"]}
+    if hk.get("pincode"):
+        kwargs["pincode"] = str(hk["pincode"]).encode()
+    os.makedirs(os.path.dirname(hk["persist_file"]), exist_ok=True)
+    driver = AccessoryDriver(**kwargs)
+    acc = LightAccessory(driver, hk["name"])
+    driver.add_accessory(accessory=acc)
+    write_pairing_info(hk["pairing_file"], driver, acc)
+    return driver
+
+
+def wait_for_network(timeout=120):
+    """Beim Booten ist das WLAN oft noch nicht da. HomeKit würde sonst mit der
+    Adresse 127.0.0.1 angekündigt und wäre vom iPhone aus nicht erreichbar."""
+    import socket
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.connect(("10.255.255.255", 1))
+                ip = sock.getsockname()[0]
+        except OSError:
+            ip = "127.0.0.1"
+        if not ip.startswith("127.") or time.monotonic() > deadline:
+            log.info("Netzwerk-Adresse: %s", ip)
+            return ip
+        log.info("Warte auf Netzwerk …")
+        time.sleep(2)
+
+
+def write_pairing_info(path, driver, acc):
+    if driver.state.paired:
+        text = "Schon mit Apple Home gekoppelt.\n"
+    else:
+        code = driver.state.pincode.decode()
+        text = (
+            "In der Home-App: + → Gerät hinzufügen → QR-Code scannen\n"
+            f"oder 'Weitere Optionen' / Code manuell eingeben:  {code}\n\n"
+        )
+        try:
+            import pyqrcode
+            text += pyqrcode.create(acc.xhm_uri()).terminal(quiet_zone=1) + "\n"
+        except Exception:
+            text += f"(QR-Code-Inhalt: {acc.xhm_uri()})\n"
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+    except Exception as exc:
+        log.warning("Konnte %s nicht schreiben: %s", path, exc)
+    log.info("Kopplung: %s", text.splitlines()[0])
+
+
 def load_config(path):
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
     if path and os.path.exists(path):
@@ -409,17 +528,25 @@ def main():
 
     server = ThreadingHTTPServer((cfg["listen"], int(cfg["port"])), make_handler(strip))
     server.daemon_threads = True
-
-    def stop(*_):
-        log.info("Beende …")
-        threading.Thread(target=server.shutdown, daemon=True).start()
-
-    signal.signal(signal.SIGTERM, stop)
-    signal.signal(signal.SIGINT, stop)
-
     log.info("Lausche auf http://%s:%s", cfg["listen"], cfg["port"])
+
     try:
-        server.serve_forever()
+        if cfg["homekit"].get("enabled"):
+            wait_for_network()
+            driver = make_homekit_driver(cfg, strip)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            signal.signal(signal.SIGTERM, driver.signal_handler)
+            signal.signal(signal.SIGINT, driver.signal_handler)
+            driver.start()  # blockiert bis SIGTERM
+            server.shutdown()
+        else:
+            def stop(*_):
+                log.info("Beende …")
+                threading.Thread(target=server.shutdown, daemon=True).start()
+
+            signal.signal(signal.SIGTERM, stop)
+            signal.signal(signal.SIGINT, stop)
+            server.serve_forever()
     finally:
         strip.shutdown()
 

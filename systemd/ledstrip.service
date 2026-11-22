@@ -1,7 +1,7 @@
 [Unit]
 Description=LED-Stripe-Dienst (ledstripd)
-After=network.target pigpiod.service
-Wants=network.target
+After=network-online.target pigpiod.service
+Wants=network-online.target
 # nie aufgeben, egal wie oft er neu starten muss
 StartLimitIntervalSec=0
 
@@ -10,7 +10,7 @@ Type=simple
 User=ledstrip
 Group=ledstrip
 SupplementaryGroups=gpio
-ExecStart=/usr/bin/python3 /opt/ledstrip/ledstripd.py /etc/ledstrip/config.json
+ExecStart=/opt/ledstrip/venv/bin/python /opt/ledstrip/ledstripd.py /etc/ledstrip/config.json
 # lgpio legt Hilfsdateien im Arbeitsverzeichnis an -> in /run statt irgendwo
 RuntimeDirectory=ledstrip
 StateDirectory=ledstrip
