@@ -1,0 +1,27 @@
+{
+  "pluginAlias": "LedStripLocal",
+  "pluginType": "accessory",
+  "singular": false,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "LED Stripe",
+        "required": true
+      },
+      "url": {
+        "title": "Adresse des ledstripd-Dienstes",
+        "type": "string",
+        "default": "http://127.0.0.1:8765"
+      },
+      "pollSeconds": {
+        "title": "Status abfragen alle (Sekunden)",
+        "type": "integer",
+        "default": 15,
+        "minimum": 5
+      }
+    }
+  }
+}

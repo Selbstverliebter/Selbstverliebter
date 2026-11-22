@@ -1,0 +1,13 @@
+{
+  "pins": { "red": 17, "green": 22, "blue": 24 },
+  "backend": "auto",
+  "pwm_frequency": 800,
+  "gamma": 2.0,
+  "fade_ms": 400,
+  "power_on_behavior": "last",
+  "listen": "127.0.0.1",
+  "port": 8765,
+  "state_file": "/var/lib/ledstrip/state.json",
+  "default_state": { "on": false, "hue": 30, "saturation": 70, "brightness": 60 },
+  "channel_scale": { "red": 1.0, "green": 1.0, "blue": 1.0 }
+}

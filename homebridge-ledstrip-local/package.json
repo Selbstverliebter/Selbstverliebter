@@ -1,0 +1,14 @@
+{
+  "name": "homebridge-ledstrip-local",
+  "version": "1.0.0",
+  "description": "RGB-LED-Stripe am Raspberry Pi (MOSFETs) über den lokalen Dienst ledstripd – merkt sich Farbe und Helligkeit.",
+  "main": "index.js",
+  "license": "MIT",
+  "keywords": [
+    "homebridge-plugin"
+  ],
+  "engines": {
+    "homebridge": "^1.6.0 || ^2.0.0-beta.0",
+    "node": ">=18"
+  }
+}

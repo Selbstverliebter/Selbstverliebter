@@ -1,0 +1,24 @@
+[Unit]
+Description=LED-Stripe-Dienst (ledstripd)
+After=network.target pigpiod.service
+Wants=network.target
+# nie aufgeben, egal wie oft er neu starten muss
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=ledstrip
+Group=ledstrip
+SupplementaryGroups=gpio
+ExecStart=/usr/bin/python3 /opt/ledstrip/ledstripd.py /etc/ledstrip/config.json
+# lgpio legt Hilfsdateien im Arbeitsverzeichnis an -> in /run statt irgendwo
+RuntimeDirectory=ledstrip
+StateDirectory=ledstrip
+WorkingDirectory=/run/ledstrip
+Environment=LG_WD=/run/ledstrip
+# Falls der Dienst abstürzt: sofort neu starten, für immer
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
