@@ -2,6 +2,8 @@
 
 > **Neu: Variante mit ESP32**, ganz ohne Raspberry Pi: [ESP32.md](ESP32.md). Das ist die empfohlene Variante:
 > günstiger, startet in Sekunden und hat keine SD-Karte. Darunter folgt die Raspberry-Pi-Variante.
+>
+> **Homebridge für andere Geräte** (z. B. Dreo-Lüfter) auf dem Pi 4: [HOMEBRIDGE-PI4.md](HOMEBRIDGE-PI4.md)
 
 RGB-LED-Stripe, über 3 MOSFETs an GPIOs des Raspberry Pi, in Apple Home.
 Standardmäßig meldet sich der Pi **direkt als HomeKit-Gerät** an (HAP-python), ganz ohne Homebridge. Das ist ideal für den Pi Zero W.
