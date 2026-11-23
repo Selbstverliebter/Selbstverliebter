@@ -17,7 +17,7 @@
 #include "HomeSpan.h"
 
 // Diagnose: gibt Schritte aus und wartet, bis sie wirklich über USB raus sind
-#define DEBUG_STEPS 1
+#define DEBUG_STEPS 0   // auf 1 setzen, falls der ESP32 wieder in einer Neustart-Schleife hängt
 #if DEBUG_STEPS
   #define STEP(msg) do { Serial.printf(">>> SCHRITT: %s\n", msg); Serial.flush(); delay(50); } while (0)
 #else
@@ -27,14 +27,22 @@
 // ============================== EINSTELLUNGEN ==============================
 
 // GPIO-Nummern der MOSFET-Gates (siehe ESP32.md für passende Pins je Board)
-#define PIN_RED    17
-#define PIN_GREEN   4
-#define PIN_BLUE    2   // Hinweis: GPIO 2 = auch die blaue Onboard-LED vieler DevKits
+#define PIN_RED     4   // NICHT GPIO 10 – der hängt am Flash-Chip und lässt den ESP32 abstürzen!
+#define PIN_GREEN  22
+#define PIN_BLUE   17
+// Verbotene Pins auf dem ESP32 DevKit: 6–11 (Flash), 34–39 (nur Eingang)
 
-// WLAN. Leer lassen ("") → der ESP32 öffnet beim ersten Start ein eigenes WLAN
+// WLAN-Name und -Passwort stehen in secrets.h (gleicher Ordner wie diese Datei).
+// Die Datei wird bei Updates nicht überschrieben und nicht ins Git-Repo hochgeladen.
+// Fehlt sie bzw. ist sie leer → der ESP32 öffnet beim ersten Start ein eigenes WLAN
 // "LED-Stripe-Setup" (Passwort: homespan), dort trägst du dein WLAN am Handy ein.
-#define WIFI_SSID      ""
-#define WIFI_PASSWORD  ""
+#if __has_include("secrets.h")
+  #include "secrets.h"
+#endif
+#ifndef WIFI_SSID
+  #define WIFI_SSID      ""
+  #define WIFI_PASSWORD  ""
+#endif
 
 // HomeKit-Code (8 Ziffern, keine einfachen Folgen wie 12345678 / 11111111).
 // Wird in der Home-App eingegeben: 384-61-927

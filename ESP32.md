@@ -18,9 +18,9 @@ Deine Lötplatine mit den MOSFETs kannst du weiterverwenden. Statt an den Pi geh
 
 | Platine (vorher zum Pi) | ESP32 (klassisches DevKit) |
 |---|---|
-| Gate/Eingang **Rot** | **GPIO 17** |
-| Gate/Eingang **Grün** | **GPIO 4** |
-| Gate/Eingang **Blau** | **GPIO 2** |
+| Gate/Eingang **Rot** | **GPIO 4** |
+| Gate/Eingang **Grün** | **GPIO 22** |
+| Gate/Eingang **Blau** | **GPIO 17** |
 | **GND** | **GND**, unbedingt verbinden! |
 
 ### Deine Platine hat eine Buchsenleiste für den Pi? → Jumper-Kabel, ohne Löten
@@ -48,9 +48,9 @@ Die äußere Reihe, also die zur Platinenkante des Pi, hat die geraden Nummern:
 
 | Buchsenleiste (Pi-Pin) | → ESP32 | Farbe (wie in der dordnung.de-Anleitung) |
 |---|---|---|
-| Pin **11** (GPIO 17) | GPIO 17 | Rot |
-| Pin **15** (GPIO 22) | GPIO 4 | Grün |
-| Pin **18** (GPIO 24) | GPIO 2 | Blau |
+| Pin **11** (GPIO 17) | GPIO 4 | Rot |
+| Pin **15** (GPIO 22) | GPIO 22 | Grün |
+| Pin **18** (GPIO 24) | GPIO 17 | Blau |
 | Pin **6** (GND) | GND | Pflicht! |
 | *(optional)* Pin **2** (5 V) | 5V / VIN | nur wenn deine Platine den Pi mit Strom versorgt hat, siehe unten |
 
@@ -80,7 +80,7 @@ Logic-Level-Typen (z. B. IRLZ44N, IRLB8721) sind ideal.
 
 | Board | gute Pins für R/G/B | diese Pins meiden |
 |---|---|---|
-| ESP32 DevKit / WROOM-32 | 17, 4, 2 (dein Setup; auch 16, 18, 19, 21–23, 25–27, 32, 33) | 0, 12, 15 (Boot-Pins), 6–11 (Flash), 34–39 (nur Eingang) |
+| ESP32 DevKit / WROOM-32 | 4, 22, 17 (dein Setup; auch 16, 18, 19, 21–23, 25–27, 32, 33) | 0, 12, 15 (Boot-Pins), 6–11 (Flash), 34–39 (nur Eingang) |
 | ESP32-C3 (z. B. SuperMini) | 5, 6, 7 | 2, 8, 9 (Boot-Pins), 18, 19 (USB) |
 | ESP32-S3 | 4, 5, 6 | 0, 3, 45, 46 (Boot-Pins), 19, 20 (USB) |
 
