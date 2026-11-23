@@ -19,9 +19,9 @@
 // ============================== EINSTELLUNGEN ==============================
 
 // GPIO-Nummern der MOSFET-Gates (siehe ESP32.md für passende Pins je Board)
-#define PIN_RED    25
-#define PIN_GREEN  26
-#define PIN_BLUE   27
+#define PIN_RED    17
+#define PIN_GREEN   4
+#define PIN_BLUE    2   // Hinweis: GPIO 2 = auch die blaue Onboard-LED vieler DevKits
 
 // WLAN. Leer lassen ("") → der ESP32 öffnet beim ersten Start ein eigenes WLAN
 // "LED-Stripe-Setup" (Passwort: homespan), dort trägst du dein WLAN am Handy ein.
