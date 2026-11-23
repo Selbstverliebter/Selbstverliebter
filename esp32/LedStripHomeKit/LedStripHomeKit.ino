@@ -39,6 +39,7 @@
 #define START_OFF_AFTER_POWER_LOSS  0
 
 #define PWM_FREQ_HZ   1000   // PWM-Frequenz für die MOSFETs
+#define PWM_BITS      14     // Auflösung: 14 Bit = 16384 Helligkeitsstufen
 #define FADE_MS       400    // Überblendzeit, 0 = sofort
 #define GAMMA         2.0f   // Helligkeitskurve (fein regelbar bei wenig Helligkeit)
 
@@ -62,7 +63,8 @@ const float CHANNEL_SCALE[3] = {1.0f, 1.0f, 1.0f};
 struct RgbStrip : Service::LightBulb {
 
   SpanCharacteristic *power, *hue, *sat, *level;
-  LedPin *pins[3];
+  const uint8_t pins[3] = {PIN_RED, PIN_GREEN, PIN_BLUE};
+  uint32_t lastStep = 0;
 
   float cur[3]    = {0, 0, 0};   // aktuelle Ausgabe 0..1 (vor Gamma)
   float from[3]   = {0, 0, 0};
@@ -78,9 +80,12 @@ struct RgbStrip : Service::LightBulb {
     level = new Characteristic::Brightness(60, true);
     level->setRange(1, 100, 1);
 
-    pins[0] = new LedPin(PIN_RED,   0, PWM_FREQ_HZ);
-    pins[1] = new LedPin(PIN_GREEN, 0, PWM_FREQ_HZ);
-    pins[2] = new LedPin(PIN_BLUE,  0, PWM_FREQ_HZ);
+    // PWM direkt über das ESP32-Board-Paket (ohne Interrupts)
+    for (int i = 0; i < 3; i++) {
+      if (!ledcAttach(pins[i], PWM_FREQ_HZ, PWM_BITS))
+        Serial.printf("*** PWM auf GPIO %d fehlgeschlagen!\n", pins[i]);
+      ledcWrite(pins[i], 0);
+    }
 
     if (START_OFF_AFTER_POWER_LOSS)
       power->setVal(false, false);
@@ -124,11 +129,17 @@ struct RgbStrip : Service::LightBulb {
 
   void loop() override {
     if (!fading) return;
+    if (millis() - lastStep < 10) return;   // max. 100 Schritte pro Sekunde
+    lastStep = millis();
     float t = (FADE_MS == 0) ? 1.0f : (millis() - fadeStart) / (float)FADE_MS;
     if (t >= 1.0f) { t = 1.0f; fading = false; }
     for (int i = 0; i < 3; i++) {
       cur[i] = from[i] + (target[i] - from[i]) * t;
-      pins[i]->set(100.0f * powf(cur[i], GAMMA) * CHANNEL_SCALE[i]);
+      const uint32_t maxDuty = (1u << PWM_BITS) - 1;
+      float duty = powf(cur[i], GAMMA) * CHANNEL_SCALE[i];
+      if (duty < 0) duty = 0;
+      if (duty > 1) duty = 1;
+      ledcWrite(pins[i], (uint32_t)(duty * maxDuty + 0.5f));
     }
   }
 };
@@ -161,7 +172,7 @@ struct WallButton : Service::StatelessProgrammableSwitch {
 void setup() {
   Serial.begin(115200);
 
-  homeSpan.setPairingCode(PAIRING_CODE);
+  homeSpan.setLogLevel(1);               // zeigt Farbänderungen im Seriellen Monitor
   homeSpan.setApSSID("LED-Stripe-Setup");
   homeSpan.enableAutoStartAP();          // ohne WLAN-Daten: Einrichtungs-WLAN öffnen
   if (strlen(WIFI_SSID) > 0)
@@ -173,6 +184,7 @@ void setup() {
     homeSpan.setStatusPin(STATUS_LED_PIN);
 
   homeSpan.begin(Category::Lighting, "LED Stripe", "LED-Stripe", "ESP32 RGB LED Stripe");
+  homeSpan.setPairingCode(PAIRING_CODE);  // erst NACH begin(), sonst wird er nicht gespeichert
 
   new SpanAccessory();
     new Service::AccessoryInformation();
