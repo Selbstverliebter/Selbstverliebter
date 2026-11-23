@@ -1,0 +1,149 @@
+/*
+ * LED-Stripe → Apple Home, direkt mit einem ESP32 (ohne Pi, ohne Homebridge)
+ *
+ * Bibliothek: HomeSpan (Arduino-Bibliotheksverwalter → "HomeSpan" installieren)
+ * Board-Paket: "esp32" von Espressif, Version 3.x
+ *
+ * Was es kann:
+ *  - RGB-Stripe über 3 MOSFETs, flimmerfreies Hardware-PWM
+ *  - merkt sich An/Aus, Farbe und Helligkeit im Flash (übersteht Stromausfall)
+ *  - "An" schaltet nur an → letzte Farbe bleibt (kein Weiß/100 % mehr)
+ *  - weiches Überblenden
+ *  - Updates später per WLAN (OTA) aus der Arduino IDE, ohne Kabel
+ *
+ * ===> Nur den Block EINSTELLUNGEN anpassen. <===
+ */
+
+#include "HomeSpan.h"
+
+// ============================== EINSTELLUNGEN ==============================
+
+// GPIO-Nummern der MOSFET-Gates (siehe ESP32.md für passende Pins je Board)
+#define PIN_RED    25
+#define PIN_GREEN  26
+#define PIN_BLUE   27
+
+// WLAN. Leer lassen ("") → der ESP32 öffnet beim ersten Start ein eigenes WLAN
+// "LED-Stripe-Setup" (Passwort: homespan), dort trägst du dein WLAN am Handy ein.
+#define WIFI_SSID      ""
+#define WIFI_PASSWORD  ""
+
+// HomeKit-Code (8 Ziffern, keine einfachen Folgen wie 12345678 / 11111111).
+// Wird in der Home-App eingegeben: 384-61-927
+#define PAIRING_CODE   "38461927"
+
+// Passwort für Updates per WLAN (Arduino IDE → Port "LED-Stripe" auswählen)
+#define OTA_PASSWORD   "ledstrip"
+
+// Verhalten nach Stromausfall: 0 = wie vorher, 1 = immer aus (Farbe bleibt gemerkt)
+#define START_OFF_AFTER_POWER_LOSS  0
+
+#define PWM_FREQ_HZ   1000   // PWM-Frequenz für die MOSFETs
+#define FADE_MS       400    // Überblendzeit, 0 = sofort
+#define GAMMA         2.0f   // Helligkeitskurve (fein regelbar bei wenig Helligkeit)
+
+// Farbkorrektur pro Kanal (0.0 – 1.0), falls Weiß z. B. zu bläulich ist
+const float CHANNEL_SCALE[3] = {1.0f, 1.0f, 1.0f};
+
+// Onboard-LED zeigt den WLAN/HomeKit-Status (-1 = aus). Bei vielen ESP32-DevKits: 2
+#define STATUS_LED_PIN  -1
+
+// ===========================================================================
+
+struct RgbStrip : Service::LightBulb {
+
+  SpanCharacteristic *power, *hue, *sat, *level;
+  LedPin *pins[3];
+
+  float cur[3]    = {0, 0, 0};   // aktuelle Ausgabe 0..1 (vor Gamma)
+  float from[3]   = {0, 0, 0};
+  float target[3] = {0, 0, 0};
+  uint32_t fadeStart = 0;
+  bool fading = false;
+
+  RgbStrip() : Service::LightBulb() {
+    // zweiter Parameter "true" = im Flash speichern und beim Start wiederherstellen
+    power = new Characteristic::On(false, true);
+    hue   = new Characteristic::Hue(30, true);
+    sat   = new Characteristic::Saturation(70, true);
+    level = new Characteristic::Brightness(60, true);
+    level->setRange(1, 100, 1);
+
+    pins[0] = new LedPin(PIN_RED,   0, PWM_FREQ_HZ);
+    pins[1] = new LedPin(PIN_GREEN, 0, PWM_FREQ_HZ);
+    pins[2] = new LedPin(PIN_BLUE,  0, PWM_FREQ_HZ);
+
+    if (START_OFF_AFTER_POWER_LOSS)
+      power->setVal(false, false);
+
+    startFade();   // gespeicherten Zustand sofort wiederherstellen
+  }
+
+  // Wird von HomeSpan EINMAL pro HomeKit-Befehl aufgerufen – auch wenn das iPhone
+  // On + Hue + Saturation gleichzeitig schickt. getNewVal() liefert dann die neuen
+  // Werte, für alles andere den bisherigen Wert.
+  boolean update() override {
+    startFade();
+    return true;
+  }
+
+  void startFade() {
+    bool  on = power->getNewVal();
+    float h  = hue->getNewVal<float>();
+    float s  = sat->getNewVal<float>() / 100.0f;
+    float v  = level->getNewVal<float>() / 100.0f;
+    if (h >= 360.0f) h = 0.0f;   // 360° = 0° (sonst kommt Magenta statt Rot)
+
+    float rgb[3];
+    LedPin::HSVtoRGB(h, s, v, &rgb[0], &rgb[1], &rgb[2]);
+
+    for (int i = 0; i < 3; i++) {
+      from[i]   = cur[i];
+      target[i] = on ? rgb[i] : 0.0f;
+    }
+    fadeStart = millis();
+    fading = true;
+
+    LOG1("LED: on=%d hue=%.0f sat=%.0f%% bri=%.0f%%\n", on, h, s * 100, v * 100);
+  }
+
+  void loop() override {
+    if (!fading) return;
+    float t = (FADE_MS == 0) ? 1.0f : (millis() - fadeStart) / (float)FADE_MS;
+    if (t >= 1.0f) { t = 1.0f; fading = false; }
+    for (int i = 0; i < 3; i++) {
+      cur[i] = from[i] + (target[i] - from[i]) * t;
+      pins[i]->set(100.0f * powf(cur[i], GAMMA) * CHANNEL_SCALE[i]);
+    }
+  }
+};
+
+void setup() {
+  Serial.begin(115200);
+
+  homeSpan.setPairingCode(PAIRING_CODE);
+  homeSpan.setApSSID("LED-Stripe-Setup");
+  homeSpan.enableAutoStartAP();          // ohne WLAN-Daten: Einrichtungs-WLAN öffnen
+  if (strlen(WIFI_SSID) > 0)
+    homeSpan.setWifiCredentials(WIFI_SSID, WIFI_PASSWORD);
+  homeSpan.enableOTA(OTA_PASSWORD);      // Updates per WLAN
+  homeSpan.enableWatchdog(30);           // hängt der ESP32 > 30 s → automatischer Neustart
+  homeSpan.setHostNameSuffix("");        // im Netzwerk erreichbar als LED-Stripe.local
+  if (STATUS_LED_PIN >= 0)
+    homeSpan.setStatusPin(STATUS_LED_PIN);
+
+  homeSpan.begin(Category::Lighting, "LED Stripe", "LED-Stripe", "ESP32 RGB LED Stripe");
+
+  new SpanAccessory();
+    new Service::AccessoryInformation();
+      new Characteristic::Identify();
+      new Characteristic::Name("LED Stripe");
+      new Characteristic::Manufacturer("DIY");
+      new Characteristic::Model("ESP32 RGB MOSFET");
+      new Characteristic::FirmwareRevision("1.0");
+    new RgbStrip();
+}
+
+void loop() {
+  homeSpan.poll();
+}

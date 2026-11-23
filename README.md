@@ -1,5 +1,8 @@
 # LED-Stripe am Raspberry Pi → Apple Home
 
+> **Neu: Variante mit ESP32**, ganz ohne Raspberry Pi: [ESP32.md](ESP32.md). Das ist die empfohlene Variante:
+> günstiger, startet in Sekunden und hat keine SD-Karte. Darunter folgt die Raspberry-Pi-Variante.
+
 RGB-LED-Stripe, über 3 MOSFETs an GPIOs des Raspberry Pi, in Apple Home.
 Standardmäßig meldet sich der Pi **direkt als HomeKit-Gerät** an (HAP-python), ganz ohne Homebridge. Das ist ideal für den Pi Zero W.
 Optional geht es auch über Homebridge: `sudo ./install.sh --homebridge`.
@@ -95,5 +98,6 @@ journalctl -b -1 -e                # was war vor dem letzten Absturz?
 - `daemon/config.example.json`: Vorlage für `/etc/ledstrip/config.json`
 - `homebridge-ledstrip-local/`: Homebridge-Plugin ohne Abhängigkeiten (nur für `--homebridge`)
 - `systemd/ledstrip.service`: systemd-Dienst
-- `install.sh`: installiert alles
+- `esp32/LedStripHomeKit/`: ESP32-Firmware (Arduino + HomeSpan)
+- `install.sh`: installiert alles (Pi)
 - `scripts/stabilisieren.sh`: Maßnahmen gegen Abstürze und Verbindungsabbrüche
