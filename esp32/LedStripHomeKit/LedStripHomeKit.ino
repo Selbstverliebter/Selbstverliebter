@@ -16,6 +16,14 @@
 
 #include "HomeSpan.h"
 
+// Diagnose: gibt Schritte aus und wartet, bis sie wirklich über USB raus sind
+#define DEBUG_STEPS 1
+#if DEBUG_STEPS
+  #define STEP(msg) do { Serial.printf(">>> SCHRITT: %s\n", msg); Serial.flush(); delay(50); } while (0)
+#else
+  #define STEP(msg) do {} while (0)
+#endif
+
 // ============================== EINSTELLUNGEN ==============================
 
 // GPIO-Nummern der MOSFET-Gates (siehe ESP32.md für passende Pins je Board)
@@ -74,6 +82,7 @@ struct RgbStrip : Service::LightBulb {
 
   RgbStrip() : Service::LightBulb() {
     // zweiter Parameter "true" = im Flash speichern und beim Start wiederherstellen
+    STEP("RgbStrip: Characteristics");
     power = new Characteristic::On(false, true);
     hue   = new Characteristic::Hue(30, true);
     sat   = new Characteristic::Saturation(70, true);
@@ -81,6 +90,7 @@ struct RgbStrip : Service::LightBulb {
     level->setRange(1, 100, 1);
 
     // PWM direkt über das ESP32-Board-Paket (ohne Interrupts)
+    STEP("RgbStrip: PWM einrichten");
     for (int i = 0; i < 3; i++) {
       if (!ledcAttach(pins[i], PWM_FREQ_HZ, PWM_BITS))
         Serial.printf("*** PWM auf GPIO %d fehlgeschlagen!\n", pins[i]);
@@ -91,6 +101,7 @@ struct RgbStrip : Service::LightBulb {
       power->setVal(false, false);
 
     startFade();   // gespeicherten Zustand sofort wiederherstellen
+    STEP("RgbStrip: fertig");
   }
 
   // Wird von HomeSpan EINMAL pro HomeKit-Befehl aufgerufen – auch wenn das iPhone
@@ -152,6 +163,7 @@ struct WallButton : Service::StatelessProgrammableSwitch {
 
   WallButton(int pin, RgbStrip *strip) : Service::StatelessProgrammableSwitch() {
     this->strip = strip;
+    STEP("Taster: anlegen");
     event = new Characteristic::ProgrammableSwitchEvent();
     if (BUTTON_SINGLE_TOGGLES_LIGHT)
       event->setValidValues(2, 1, 2);   // Home-App bietet nur "doppelt" und "lang" an
@@ -171,6 +183,8 @@ struct WallButton : Service::StatelessProgrammableSwitch {
 
 void setup() {
   Serial.begin(115200);
+  delay(200);
+  STEP("setup() Start");
 
   homeSpan.setLogLevel(1);               // zeigt Farbänderungen im Seriellen Monitor
   homeSpan.setApSSID("LED-Stripe-Setup");
@@ -183,8 +197,11 @@ void setup() {
   if (STATUS_LED_PIN >= 0)
     homeSpan.setStatusPin(STATUS_LED_PIN);
 
+  STEP("vor homeSpan.begin()");
   homeSpan.begin(Category::Lighting, "LED Stripe", "LED-Stripe", "ESP32 RGB LED Stripe");
+  STEP("nach begin(), vor setPairingCode()");
   homeSpan.setPairingCode(PAIRING_CODE);  // erst NACH begin(), sonst wird er nicht gespeichert
+  STEP("nach setPairingCode()");
 
   new SpanAccessory();
     new Service::AccessoryInformation();
@@ -196,8 +213,12 @@ void setup() {
     RgbStrip *strip = new RgbStrip();
     if (BUTTON_PIN >= 0)
       new WallButton(BUTTON_PIN, strip);
+  STEP("setup() fertig, starte poll()");
 }
 
 void loop() {
+  static int n = 0;
+  if (n < 3) { Serial.printf(">>> SCHRITT: poll() Nr. %d Start\n", n); Serial.flush(); }
   homeSpan.poll();
+  if (n < 3) { Serial.printf(">>> SCHRITT: poll() Nr. %d fertig\n", n); Serial.flush(); n++; }
 }
