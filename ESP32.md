@@ -23,6 +23,51 @@ Deine Lötplatine mit den MOSFETs kannst du weiterverwenden. Statt an den Pi geh
 | Gate/Eingang **Blau** | **GPIO 27** |
 | **GND** | **GND**, unbedingt verbinden! |
 
+### Deine Platine hat eine Buchsenleiste für den Pi? → Jumper-Kabel, ohne Löten
+
+Du brauchst **5 Dupont-Jumperkabel „Stecker auf Buchse“ (male-female)**. Den Stecker steckst du in die Buchsenleiste
+der Platine, an die Stelle, an der vorher der Pi-Pin steckte. Die Buchse steckst du auf den Pin des ESP32.
+
+Draufsicht auf die Buchsenleiste. Pin 1 liegt an dem Ende, wo beim Pi die SD-Karte ist, in der **inneren** Reihe.
+Die äußere Reihe, also die zur Platinenkante des Pi, hat die geraden Nummern:
+
+```
+              innen   außen
+   3,3 V  ->   [ 1]   [ 2]  <- 5 V
+               [ 3]   [ 4]  <- 5 V
+               [ 5]   [ 6]  <- GND  ●
+               [ 7]   [ 8]
+     GND  ●    [ 9]   [10]
+ GPIO 17  ★    [11]   [12]
+               [13]   [14]  <- GND
+ GPIO 22  ★    [15]   [16]
+               [17]   [18]  ★ GPIO 24
+               [19]   [20]  <- GND
+               ...    ...
+```
+
+| Buchsenleiste (Pi-Pin) | → ESP32 | Farbe (wie in der dordnung.de-Anleitung) |
+|---|---|---|
+| Pin **11** (GPIO 17) | GPIO 25 | Rot |
+| Pin **15** (GPIO 22) | GPIO 26 | Grün |
+| Pin **18** (GPIO 24) | GPIO 27 | Blau |
+| Pin **6** (GND) | GND | Pflicht! |
+| *(optional)* Pin **2** (5 V) | 5V / VIN | nur wenn deine Platine den Pi mit Strom versorgt hat, siehe unten |
+
+**Du weißt nicht mehr, welche Pins es waren?** So testest du es, ohne etwas kaputtzumachen:
+1. Das LED-Netzteil einstecken. Den ESP32 per USB versorgen und **GND vom ESP32 → Pin 6** der Leiste verbinden.
+2. Ein Jumperkabel an den **3V3-Pin des ESP32** stecken. Mit dem anderen Ende kurz nacheinander
+   in die Löcher 11, 15, 18 (und notfalls 12, 13, 16, 22 …) der Leiste tippen.
+3. Wo der Stripe rot, grün oder blau aufleuchtet, sind deine drei Pins. ⚠️ **Nicht in Pin 2 oder 4 tippen**, da liegen 5 V.
+
+Leuchtet am Ende eine falsche Farbe, tauschst du einfach zwei Kabel am ESP32. Am Code musst du nichts ändern.
+
+**Hat die Platine den Pi mit Strom versorgt?** Wenn auf der Platine ein Spannungswandler sitzt und der Pi kein eigenes
+USB-Netzteil hatte, dann ja. Prüf das mit dem Multimeter: LED-Netzteil an, Spannung zwischen **Pin 2 und Pin 6** messen.
+- Misst du **ca. 5 V**, kannst du den ESP32 mit einem Kabel von Pin 2 → **5V/VIN** versorgen. Dann ist **kein USB-Netzteil** nötig.
+- Misst du **mehr als 5,5 V**, darfst du das **nicht** anschließen. Dann versorgst du den ESP32 per USB.
+- ⚠️ USB-Kabel und Pin 2 nicht gleichzeitig benutzen. Zum Hochladen das 5-V-Kabel abziehen.
+
 **Strom für den ESP32**, eine von zwei Möglichkeiten:
 - ein USB-Netzteil am USB-Anschluss, **oder**
 - ein kleiner **Step-down-Wandler** (z. B. MP1584 oder LM2596), der aus den 12 V des LED-Netzteils **5 V** macht → an den Pin **5V/VIN** des ESP32.
