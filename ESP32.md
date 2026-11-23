@@ -87,6 +87,22 @@ Logic-Level-Typen (z. B. IRLZ44N, IRLB8721) sind ideal.
 Tipp: Ein **10-kΩ-Widerstand von jedem Gate nach GND** verhindert, dass der Stripe beim Einstecken kurz aufblitzt.
 Auf vielen MOSFET-Platinen ist das schon drauf.
 
+### Taster (programmierbarer Schalter), optional
+
+Du kannst einen beliebigen Taster einbauen, der beim Drücken schließt (Klingeltaster, Arcade-Knopf, Wandtaster mit Schließer).
+Er kommt **zwischen GPIO 33 und GND**. Einen Widerstand brauchst du nicht.
+
+| Drücken | Wirkung |
+|---|---|
+| 1× | Stripe an/aus, **direkt**, das geht auch ohne WLAN und ohne iPhone |
+| 2× | frei belegbar in der Home-App |
+| lang (2 s) | frei belegbar in der Home-App |
+
+**Belegen:** In der Home-App den LED Stripe lange antippen → Einstellungen → **Taste** → für „Zweimal drücken“
+und „Gedrückt halten“ eine Szene oder ein Gerät wählen. So kann ein Knopf zum Beispiel auch andere Lampen oder alles ausschalten.
+
+Wenn du keinen Taster willst, setzt du `BUTTON_PIN` im Sketch auf `-1`.
+
 ## 2. Arduino IDE vorbereiten (einmalig, am Computer)
 
 1. **Arduino IDE 2** installieren: https://www.arduino.cc/en/software

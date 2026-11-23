@@ -45,6 +45,15 @@
 // Farbkorrektur pro Kanal (0.0 – 1.0), falls Weiß z. B. zu bläulich ist
 const float CHANNEL_SCALE[3] = {1.0f, 1.0f, 1.0f};
 
+// Taster (programmierbarer Schalter). Taster zwischen diesem Pin und GND, kein Widerstand nötig.
+// -1 = kein Taster. Auf dem klassischen DevKit z. B. 33.
+//   1× drücken     → Stripe an/aus (funktioniert auch ohne WLAN/iPhone)
+//   2× drücken     → frei belegbar in der Home-App (z. B. Szene "Filmabend")
+//   lange drücken  → frei belegbar in der Home-App (z. B. "Alles aus")
+#define BUTTON_PIN  33
+// 0 = auch "1× drücken" frei in der Home-App belegen statt Stripe direkt zu schalten
+#define BUTTON_SINGLE_TOGGLES_LIGHT  1
+
 // Onboard-LED zeigt den WLAN/HomeKit-Status (-1 = aus). Bei vielen ESP32-DevKits: 2
 #define STATUS_LED_PIN  -1
 
@@ -87,6 +96,12 @@ struct RgbStrip : Service::LightBulb {
     return true;
   }
 
+  // Für den Taster: direkt am Gerät umschalten (meldet den neuen Zustand an HomeKit)
+  void toggle() {
+    power->setVal(!power->getVal());
+    startFade();
+  }
+
   void startFade() {
     bool  on = power->getNewVal();
     float h  = hue->getNewVal<float>();
@@ -118,6 +133,31 @@ struct RgbStrip : Service::LightBulb {
   }
 };
 
+// Taster als "programmierbarer Schalter" in der Home-App
+struct WallButton : Service::StatelessProgrammableSwitch {
+
+  SpanCharacteristic *event;
+  RgbStrip *strip;
+
+  WallButton(int pin, RgbStrip *strip) : Service::StatelessProgrammableSwitch() {
+    this->strip = strip;
+    event = new Characteristic::ProgrammableSwitchEvent();
+    if (BUTTON_SINGLE_TOGGLES_LIGHT)
+      event->setValidValues(2, 1, 2);   // Home-App bietet nur "doppelt" und "lang" an
+    new SpanButton(pin);                // interner Pull-up, Taster nach GND
+  }
+
+  void button(int pin, int pressType) override {
+    if (pressType == SpanButton::SINGLE && BUTTON_SINGLE_TOGGLES_LIGHT) {
+      LOG1("Taster: 1x → Stripe umschalten\n");
+      strip->toggle();
+      return;
+    }
+    LOG1("Taster: Ereignis %d an HomeKit\n", pressType);
+    event->setVal(pressType);           // SINGLE=0, DOUBLE=1, LONG=2 – gleiche Werte wie HomeKit
+  }
+};
+
 void setup() {
   Serial.begin(115200);
 
@@ -141,7 +181,9 @@ void setup() {
       new Characteristic::Manufacturer("DIY");
       new Characteristic::Model("ESP32 RGB MOSFET");
       new Characteristic::FirmwareRevision("1.0");
-    new RgbStrip();
+    RgbStrip *strip = new RgbStrip();
+    if (BUTTON_PIN >= 0)
+      new WallButton(BUTTON_PIN, strip);
 }
 
 void loop() {
